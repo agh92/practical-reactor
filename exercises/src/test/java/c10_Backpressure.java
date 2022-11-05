@@ -18,9 +18,9 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Backpressure is a mechanism that allows a consumer to signal to a producer that it is ready receive data.
  * This is important because the producer may be sending data faster than the consumer can process it, and can overwhelm consumer.
- *
+ * <p>
  * Read first:
- *
+ * <p>
  * https://projectreactor.io/docs/core/release/reference/#reactive.backpressure
  * https://projectreactor.io/docs/core/release/reference/#_on_backpressure_and_ways_to_reshape_requests
  * https://projectreactor.io/docs/core/release/reference/#_operators_that_change_the_demand_from_downstream
@@ -28,9 +28,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * https://projectreactor.io/docs/core/release/reference/#_asynchronous_but_single_threaded_push
  * https://projectreactor.io/docs/core/release/reference/#_a_hybrid_pushpull_model
  * https://projectreactor.io/docs/core/release/reference/#_an_alternative_to_lambdas_basesubscriber
- *
+ * <p>
  * Useful documentation:
- *
+ * <p>
  * https://projectreactor.io/docs/core/release/reference/#which-operator
  * https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Mono.html
  * https://projectreactor.io/docs/core/release/api/reactor/core/publisher/Flux.html
@@ -47,8 +47,7 @@ public class c10_Backpressure extends BackpressureBase {
     public void request_and_demand() {
         CopyOnWriteArrayList<Long> requests = new CopyOnWriteArrayList<>();
         Flux<String> messageStream = messageStream1()
-                //todo: change this line only
-                ;
+                .doOnRequest(requests::add);
 
         StepVerifier.create(messageStream, StepVerifierOptions.create().initialRequest(0))
                     .expectSubscription()
@@ -71,8 +70,8 @@ public class c10_Backpressure extends BackpressureBase {
     public void limited_demand() {
         CopyOnWriteArrayList<Long> requests = new CopyOnWriteArrayList<>();
         Flux<String> messageStream = messageStream2()
-                //todo: do your changes here
-                ;
+                .doOnRequest(requests::add)
+                .limitRate(1);
 
         StepVerifier.create(messageStream, StepVerifierOptions.create().initialRequest(0))
                     .expectSubscription()
@@ -94,7 +93,11 @@ public class c10_Backpressure extends BackpressureBase {
     @Test
     public void uuid_generator() {
         Flux<UUID> uuidGenerator = Flux.create(sink -> {
-            //todo: do your changes here
+            sink.onRequest(requested -> {
+                for (int i = 0; i < requested; i++) {
+                    sink.next(UUID.randomUUID());
+                }
+            });
         });
 
         StepVerifier.create(uuidGenerator
@@ -116,8 +119,7 @@ public class c10_Backpressure extends BackpressureBase {
     @Test
     public void pressure_is_too_much() {
         Flux<String> messageStream = messageStream3()
-                //todo: change this line only
-                ;
+                .onBackpressureError();
 
         StepVerifier.create(messageStream, StepVerifierOptions.create()
                                                               .initialRequest(0))
@@ -137,8 +139,7 @@ public class c10_Backpressure extends BackpressureBase {
     @Test
     public void u_wont_brake_me() {
         Flux<String> messageStream = messageStream4()
-                //todo: change this line only
-                ;
+                .onBackpressureBuffer();
 
         StepVerifier.create(messageStream, StepVerifierOptions.create()
                                                               .initialRequest(0))
@@ -170,16 +171,19 @@ public class c10_Backpressure extends BackpressureBase {
         remoteMessageProducer()
                 .doOnCancel(() -> lockRef.get().countDown())
                 .subscribeWith(new BaseSubscriber<String>() {
-                    //todo: do your changes only within BaseSubscriber class implementation
                     @Override
                     protected void hookOnSubscribe(Subscription subscription) {
                         sub.set(subscription);
+                        subscription.request(10);
                     }
 
                     @Override
                     protected void hookOnNext(String s) {
                         System.out.println(s);
-                        count.incrementAndGet();
+                        int receivedMessages = count.incrementAndGet();
+                        if (10 <= receivedMessages) {
+                            sub.getAcquire().cancel();
+                        }
                     }
                     //-----------------------------------------------------
                 });
